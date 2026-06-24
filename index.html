@@ -497,8 +497,14 @@
       <div style="margin-top: 14px">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
           <input type="checkbox" id="autosync" onchange="toggleAutosync()" style="width:18px;height:18px;accent-color:#60a5fa">
-          <span style="font-size:0.9em">🔄 Автосинхронизация (отправлять в облако через 5 сек после изменений)</span>
+          <span style="font-size:0.9em">🔄 Полная автосинхронизация</span>
         </label>
+        <div style="font-size:0.78em; color:#64748b; margin-top:6px; padding-left:26px; line-height:1.5">
+          • При включении: изменения отправляются в облако через 5 сек<br>
+          • Облако проверяется каждые 30 сек на свежие данные с других устройств<br>
+          • При возврате на вкладку (с другого приложения) — проверка облака сразу<br>
+          • Подгрузка из облака происходит автоматически при открытии трекера
+        </div>
       </div>
     </div>
 
@@ -581,6 +587,13 @@ function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   // Триггерим автосинхронизацию, если она включена
   if (typeof scheduleAutosync === 'function') scheduleAutosync();
+}
+// Тихое сохранение (для применения данных из облака) — определяется ниже в Gist sync
+// Но если ещё не определено, ставим заглушку
+if (typeof _saveDataRaw !== 'function') {
+  window._saveDataRaw = function() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  };
 }
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1220,7 +1233,11 @@ function clearAll() {
 // ============ GIST SYNC ============
 const GIST_CONFIG_KEY = '1cdo_gist_config';
 const GIST_AUTOSYNC_KEY = '1cdo_autosync';
+const LOCAL_MODIFIED_KEY = '1cdo_local_modified';
+const AUTOPULL_INTERVAL_MS = 30000; // проверять облако каждые 30 сек
 let autosyncTimer = null;
+let autopullTimer = null;
+let lastSyncedAt = null; // временная метка последней синхронизации (из облака)
 
 function loadGistConfig() {
   try {
@@ -1235,8 +1252,244 @@ function saveGistConfig() {
   };
   localStorage.setItem(GIST_CONFIG_KEY, JSON.stringify(cfg));
   toast('Настройки сохранены');
-  updateGistStatus('Настройки сохранены. Нажмите "Загрузить из облака" чтобы проверить подключение.');
+  updateGistStatus('Настройки сохранены. Запускаю первую загрузку...');
+  // Сразу подтягиваем из облака
+  setTimeout(() => gistAutoPull(true), 500);
+  startAutopull();
 }
+function updateGistStatus(msg, isError) {
+  const el = document.getElementById('gist-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#ef4444' : '#94a3b8';
+}
+
+function markLocalModified() {
+  localStorage.setItem(LOCAL_MODIFIED_KEY, new Date().toISOString());
+}
+function getLocalModified() {
+  return localStorage.getItem(LOCAL_MODIFIED_KEY);
+}
+function clearLocalModified() {
+  localStorage.removeItem(LOCAL_MODIFIED_KEY);
+}
+
+async function gistUpload(silent) {
+  const cfg = loadGistConfig();
+  if (!cfg.id || !cfg.token) {
+    if (!silent) alert('Сначала укажите Gist ID и Token');
+    return false;
+  }
+  if (cfg.token.startsWith('github_pat_')) {
+    updateGistStatus('⚠️ У вас Fine-grained token (github_pat_...) — он НЕ работает с Gist API. Создайте Classic token (ghp_...) на github.com/settings/tokens', true);
+    if (!silent) alert('Fine-grained tokens (github_pat_...) не поддерживают Gist API. Нужен Classic token, начинающийся с ghp_');
+    return false;
+  }
+  if (cfg.id.includes('/') || cfg.id.length < 20) {
+    updateGistStatus('⚠️ Gist ID выглядит некорректно. Должна быть длинная строка из букв и цифр без слешей.', true);
+    if (!silent) alert('Gist ID должен быть длинной строкой из букв и цифр (например: 7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d). Без логина и слешей!');
+    return false;
+  }
+  try {
+    if (!silent) updateGistStatus('⏳ Отправляю в облако...');
+    const syncedAt = new Date().toISOString();
+    const payload = {
+      files: {
+        '1cdo-tracker.json': {
+          content: JSON.stringify({ ...data, _syncedAt: syncedAt }, null, 2)
+        }
+      }
+    };
+    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText}`);
+    }
+    lastSyncedAt = syncedAt;
+    clearLocalModified();
+    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
+    updateGistStatus(`✅ Синхронизировано в ${now}`);
+    if (!silent) toast('Отправлено в облако!');
+    return true;
+  } catch(err) {
+    const friendly = explainError(err.message);
+    updateGistStatus(`❌ ${friendly}`, true);
+    if (!silent) toast('Ошибка отправки');
+    return false;
+  }
+}
+
+// Тихая автозагрузка из облака (вызывается при старте и периодически)
+async function gistAutoPull(showStatus) {
+  const cfg = loadGistConfig();
+  if (!cfg.id || !cfg.token) return;
+  if (cfg.token.startsWith('github_pat_')) return;
+  if (cfg.id.includes('/') || cfg.id.length < 20) return;
+
+  try {
+    if (showStatus) updateGistStatus('⏳ Проверяю облако...');
+    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
+      headers: {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+      }
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText}`);
+    }
+    const gist = await resp.json();
+    const file = gist.files && gist.files['1cdo-tracker.json'];
+    if (!file) {
+      if (showStatus) updateGistStatus('⚠️ Файл "1cdo-tracker.json" не найден в Gist. Загрузите данные кнопкой "Отправить в облако".', true);
+      return;
+    }
+
+    let cloudData;
+    try {
+      cloudData = JSON.parse(file.content);
+    } catch (e) {
+      if (showStatus) updateGistStatus('⚠️ В облаке некорректный JSON. Отправьте локальные данные кнопкой выше.', true);
+      return;
+    }
+    if (!cloudData || typeof cloudData !== 'object') return;
+
+    const cloudTime = cloudData._syncedAt;
+    const localMod = getLocalModified();
+
+    // Логика принятия решения:
+    // 1. Если в облаке нет _syncedAt — облако только инициализировано, не трогаем локальное
+    // 2. Если cloudTime === lastSyncedAt — никаких изменений в облаке, ничего делать не надо
+    // 3. Если есть локальные несинхронизированные изменения (localMod > cloudTime) — НЕ перезаписываем, ждём отправки
+    // 4. Если cloudTime новее, чем lastSyncedAt — подгружаем
+
+    if (!cloudTime) {
+      // Облако пустое — если у нас есть данные, отправляем их
+      const localHasData = data.cases.length || data.freelance.length ||
+                          data.articles.length || Object.keys(data.tasks).length;
+      if (localHasData) {
+        if (showStatus) updateGistStatus('☁️ Облако пусто, отправляю локальные данные...');
+        await gistUpload(true);
+      } else {
+        if (showStatus) updateGistStatus('☁️ Облако пусто. Начинайте работу — данные будут синхронизироваться автоматически.');
+      }
+      return;
+    }
+
+    // Если в облаке та же версия, что мы видели в последний раз — изменений нет
+    if (cloudTime === lastSyncedAt) {
+      if (showStatus) {
+        const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
+        updateGistStatus(`✅ Актуально (проверено в ${now})`);
+      }
+      return;
+    }
+
+    // Если есть локальные изменения, которые новее облака — не перезаписываем
+    if (localMod && localMod > cloudTime) {
+      if (showStatus) updateGistStatus('⚠️ Локальные изменения свежее облака, нужно отправить в облако');
+      // Запускаем отправку (через 5 сек как обычно через scheduleAutosync)
+      scheduleAutosync();
+      return;
+    }
+
+    // Облако новее — подгружаем
+    delete cloudData._syncedAt;
+    data = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...cloudData };
+    lastSyncedAt = cloudTime;
+    clearLocalModified();
+    // Сохраняем без триггера автосинка, чтобы не было цикла
+    _saveDataRaw();
+    renderAll();
+    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
+    updateGistStatus(`✅ Подтянуты изменения из облака (${now})`);
+    if (showStatus) toast('Загружены свежие данные из облака');
+  } catch(err) {
+    const friendly = explainError(err.message);
+    if (showStatus) updateGistStatus(`❌ ${friendly}`, true);
+  }
+}
+
+// Кнопка "Загрузить из облака" — принудительно
+async function gistDownload() {
+  await gistAutoPull(true);
+}
+
+function explainError(msg) {
+  if (msg.includes('404')) {
+    return 'HTTP 404 — Gist не найден. Проверьте: 1) Gist ID скопирован верно (только хеш, без логина и слешей); 2) Token — Classic (ghp_...), а не Fine-grained (github_pat_...); 3) Gist создан под тем же аккаунтом, что и Token.';
+  }
+  if (msg.includes('401')) {
+    return 'HTTP 401 — Неверный или истёкший Token. Создайте новый на github.com/settings/tokens (Classic, scope: gist).';
+  }
+  if (msg.includes('403')) {
+    return 'HTTP 403 — У Token нет права gist. При создании Token отметьте scope "gist".';
+  }
+  if (msg.includes('422')) {
+    return 'HTTP 422 — Неверный формат данных. Возможно файл в Gist не json.';
+  }
+  return msg;
+}
+
+function toggleAutosync() {
+  const on = document.getElementById('autosync').checked;
+  localStorage.setItem(GIST_AUTOSYNC_KEY, on ? '1' : '0');
+  if (on) {
+    const cfg = loadGistConfig();
+    if (!cfg.id || !cfg.token) {
+      alert('Сначала настройте Gist ID и Token');
+      document.getElementById('autosync').checked = false;
+      localStorage.setItem(GIST_AUTOSYNC_KEY, '0');
+      return;
+    }
+    updateGistStatus('🔄 Автосинхронизация включена: изменения отправляются через 5 сек, проверка облака каждые 30 сек');
+    startAutopull();
+  } else {
+    updateGistStatus('⏸ Автосинхронизация выключена');
+    stopAutopull();
+  }
+}
+
+function scheduleAutosync() {
+  if (localStorage.getItem(GIST_AUTOSYNC_KEY) !== '1') return;
+  markLocalModified();
+  clearTimeout(autosyncTimer);
+  autosyncTimer = setTimeout(() => {
+    gistUpload(true); // тихая отправка
+  }, 5000);
+}
+
+function startAutopull() {
+  stopAutopull();
+  const cfg = loadGistConfig();
+  if (!cfg.id || !cfg.token) return;
+  autopullTimer = setInterval(() => {
+    // Проверяем облако только если нет локальных несинхронизированных изменений
+    // (иначе нам важнее отправить, а не получить)
+    if (!getLocalModified()) {
+      gistAutoPull(false);
+    }
+  }, AUTOPULL_INTERVAL_MS);
+}
+function stopAutopull() {
+  if (autopullTimer) clearInterval(autopullTimer);
+  autopullTimer = null;
+}
+
+// Сохранение без триггера автосинка (для применения данных из облака)
+function _saveDataRaw() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+// Загружаем настройки при старте
 function updateGistStatus(msg, isError) {
   const el = document.getElementById('gist-status');
   if (!el) return;
@@ -1248,6 +1501,17 @@ async function gistUpload(silent) {
   const cfg = loadGistConfig();
   if (!cfg.id || !cfg.token) {
     if (!silent) alert('Сначала укажите Gist ID и Token');
+    return false;
+  }
+  // Базовая валидация
+  if (cfg.token.startsWith('github_pat_')) {
+    updateGistStatus('⚠️ У вас Fine-grained token (github_pat_...) — он НЕ работает с Gist API. Создайте Classic token (ghp_...) на github.com/settings/tokens', true);
+    if (!silent) alert('Fine-grained tokens (github_pat_...) не поддерживают Gist API. Нужен Classic token, начинающийся с ghp_');
+    return false;
+  }
+  if (cfg.id.includes('/') || cfg.id.length < 20) {
+    updateGistStatus('⚠️ Gist ID выглядит некорректно. Должна быть длинная строка из букв и цифр без слешей.', true);
+    if (!silent) alert('Gist ID должен быть длинной строкой из букв и цифр (например: 7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d). Без логина и слешей!');
     return false;
   }
   try {
@@ -1268,13 +1532,17 @@ async function gistUpload(silent) {
       },
       body: JSON.stringify(payload)
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText}`);
+    }
     const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
     updateGistStatus(`✅ Отправлено в облако в ${now}`);
     if (!silent) toast('Отправлено в облако!');
     return true;
   } catch(err) {
-    updateGistStatus(`❌ Ошибка: ${err.message}`, true);
+    const friendly = explainError(err.message);
+    updateGistStatus(`❌ ${friendly}`, true);
     if (!silent) toast('Ошибка отправки');
     return false;
   }
@@ -1286,6 +1554,16 @@ async function gistDownload() {
     alert('Сначала укажите Gist ID и Token');
     return;
   }
+  if (cfg.token.startsWith('github_pat_')) {
+    updateGistStatus('⚠️ Fine-grained token (github_pat_...) не работает с Gist API. Создайте Classic token (ghp_...)', true);
+    alert('Fine-grained tokens (github_pat_...) не поддерживают Gist API. Нужен Classic token, начинающийся с ghp_');
+    return;
+  }
+  if (cfg.id.includes('/') || cfg.id.length < 20) {
+    updateGistStatus('⚠️ Gist ID выглядит некорректно. Должна быть длинная строка из букв и цифр без слешей.', true);
+    alert('Gist ID должен быть длинной строкой из букв и цифр без логина и слешей!');
+    return;
+  }
   try {
     updateGistStatus('⏳ Загружаю из облака...');
     const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
@@ -1294,14 +1572,19 @@ async function gistDownload() {
         'Accept': 'application/vnd.github+json',
       }
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText}`);
+    }
     const gist = await resp.json();
     const file = gist.files['1cdo-tracker.json'];
-    if (!file) throw new Error('Файл 1cdo-tracker.json не найден в Gist');
+    if (!file) {
+      const availableFiles = Object.keys(gist.files).join(', ');
+      throw new Error(`Файл "1cdo-tracker.json" не найден в Gist. Найденные файлы: ${availableFiles}. Переименуйте файл в Gist в "1cdo-tracker.json".`);
+    }
     const cloudData = JSON.parse(file.content);
-    if (!cloudData || typeof cloudData !== 'object') throw new Error('Некорректные данные');
+    if (!cloudData || typeof cloudData !== 'object') throw new Error('Некорректные данные в файле');
 
-    // Проверка: если в облаке "пусто" (только {}), не перезаписываем локальные
     const cloudHasData = (cloudData.cases && cloudData.cases.length) ||
                         (cloudData.freelance && cloudData.freelance.length) ||
                         (cloudData.articles && cloudData.articles.length) ||
@@ -1309,7 +1592,7 @@ async function gistDownload() {
     const localHasData = data.cases.length || data.freelance.length || data.articles.length || Object.keys(data.tasks).length;
 
     if (!cloudHasData && localHasData) {
-      if (!confirm('В облаке пусто, а локально есть данные. Точно загрузить пустое из облака? Лучше нажмите "Отмена" и сначала "Отправить в облако".')) return;
+      if (!confirm('В облаке пусто, а локально есть данные. Точно загрузить пустое? Лучше "Отмена" и сначала "Отправить в облако".')) return;
     }
 
     const cloudTime = cloudData._syncedAt || 'неизвестно';
@@ -1323,9 +1606,26 @@ async function gistDownload() {
     updateGistStatus(`✅ Загружено из облака в ${now}`);
     toast('Данные загружены!');
   } catch(err) {
-    updateGistStatus(`❌ Ошибка: ${err.message}`, true);
+    const friendly = explainError(err.message);
+    updateGistStatus(`❌ ${friendly}`, true);
     toast('Ошибка загрузки');
   }
+}
+
+function explainError(msg) {
+  if (msg.includes('404')) {
+    return 'HTTP 404 — Gist не найден. Проверьте: 1) Gist ID скопирован верно (только хеш, без логина и слешей); 2) Token — Classic (ghp_...), а не Fine-grained (github_pat_...); 3) Gist создан под тем же аккаунтом, что и Token.';
+  }
+  if (msg.includes('401')) {
+    return 'HTTP 401 — Неверный или истёкший Token. Создайте новый на github.com/settings/tokens (Classic, scope: gist).';
+  }
+  if (msg.includes('403')) {
+    return 'HTTP 403 — У Token нет права gist. При создании Token отметьте scope "gist".';
+  }
+  if (msg.includes('422')) {
+    return 'HTTP 422 — Неверный формат данных. Возможно файл в Gist не json.';
+  }
+  return msg;
 }
 
 function toggleAutosync() {
@@ -1362,10 +1662,25 @@ function initGistConfig() {
   if (tokenEl) tokenEl.value = cfg.token || '';
   const autoEl = document.getElementById('autosync');
   if (autoEl) autoEl.checked = localStorage.getItem(GIST_AUTOSYNC_KEY) === '1';
+
   if (cfg.id && cfg.token) {
-    updateGistStatus('☁️ Подключено к Gist. Загрузите из облака для проверки.');
+    updateGistStatus('☁️ Подключение настроено. Подгружаю свежие данные из облака...');
+    // АВТОЗАГРУЗКА при старте
+    gistAutoPull(true);
+    // Запускаем периодическую проверку облака
+    startAutopull();
   }
 }
+
+// Подгружаем из облака при возврате на вкладку (если переключались между приложениями)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    const cfg = loadGistConfig();
+    if (cfg.id && cfg.token && !getLocalModified()) {
+      gistAutoPull(false);
+    }
+  }
+});
 
 // ============ UTILS ============
 function escapeHtml(s) {
@@ -1393,5 +1708,5 @@ renderAll();
 initDates();
 initGistConfig();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a10a2e355be1e4a2',t:'MTc4MjI4NzgzNA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
