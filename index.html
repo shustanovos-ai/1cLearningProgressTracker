@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -453,26 +454,62 @@
   <!-- ============ НАСТРОЙКИ / ДАННЫЕ ============ -->
   <div class="panel" id="panel-settings">
     <div class="card">
-      <h2>⚙️ Управление данными</h2>
-      <p style="color:#94a3b8; font-size:0.88em">Все данные хранятся <b>локально в вашем браузере</b> (localStorage). Они не отправляются никуда. Если очистите кеш браузера или используете другое устройство — данные нужно перенести вручную через экспорт/импорт ниже.</p>
+      <h2>☁️ Синхронизация между устройствами (GitHub Gist)</h2>
+      <p style="color:#94a3b8; font-size:0.88em">Подключите GitHub Gist — и данные будут автоматически синхронизироваться между всеми вашими устройствами. <a href="#" onclick="document.getElementById('gist-help').style.display='block';return false" style="color:#60a5fa">Как настроить (один раз) →</a></p>
 
-      <h3>📤 Экспорт (сохранить в файл)</h3>
-      <p style="color:#94a3b8; font-size:0.85em">Скачайте резервную копию. Рекомендуется делать раз в неделю.</p>
-      <button onclick="exportData()">⬇️ Скачать JSON-файл</button>
+      <div id="gist-help" style="display:none; background: rgba(15,23,42,0.6); padding: 14px; border-radius: 10px; margin: 10px 0; font-size: 0.88em">
+        <h3 style="margin-top:0">🔐 Шаг 1. Создайте Personal Access Token</h3>
+        <ol style="padding-left: 20px; color: #cbd5e1">
+          <li>Откройте <a href="https://github.com/settings/tokens?type=beta" target="_blank" style="color:#60a5fa">github.com/settings/tokens</a> (нужен аккаунт GitHub)</li>
+          <li>Нажмите <b>«Generate new token (classic)»</b></li>
+          <li>Note: <code style="background:#0f172a;padding:2px 6px;border-radius:4px">1cdo-tracker</code></li>
+          <li>Expiration: <b>No expiration</b> (или подальше)</li>
+          <li>Scopes: отметьте только <b>✅ gist</b></li>
+          <li>Нажмите <b>«Generate token»</b> и <b>скопируйте</b> токен (начинается с <code>ghp_</code> или <code>github_pat_</code>) — он показывается только один раз!</li>
+        </ol>
 
-      <h3>📥 Импорт (загрузить из файла)</h3>
-      <input type="file" id="import-file" accept=".json" style="background:none;border:none;padding:0;margin-bottom:8px">
-      <br>
-      <button onclick="importData()">⬆️ Загрузить из файла</button>
+        <h3>📝 Шаг 2. Создайте пустой Gist</h3>
+        <ol style="padding-left: 20px; color: #cbd5e1">
+          <li>Откройте <a href="https://gist.github.com" target="_blank" style="color:#60a5fa">gist.github.com</a></li>
+          <li>Filename: <code>1cdo-tracker.json</code></li>
+          <li>Содержимое: <code>{}</code> (просто две фигурные скобки)</li>
+          <li>Нажмите <b>«Create secret gist»</b> (важно: <b>secret</b>, не public!)</li>
+          <li>Из URL скопируйте <b>ID Gist</b>: <code>gist.github.com/USER/<b style="color:#fbbf24">ЭТО_ID</b></code></li>
+        </ol>
 
-      <h3>🔄 Синхронизация между устройствами</h3>
-      <p style="color:#94a3b8; font-size:0.85em">Просто:</p>
-      <ol style="color:#cbd5e1; font-size:0.9em; padding-left: 20px">
-        <li>На компе — нажмите «Скачать JSON-файл»</li>
-        <li>Отправьте файл себе (Telegram «Избранное», почта, AirDrop)</li>
-        <li>На телефоне откройте этот же HTML-файл (можно через iCloud Drive / Files)</li>
-        <li>Нажмите «Загрузить из файла» и выберите сохранённый JSON</li>
-      </ol>
+        <h3>🔌 Шаг 3. Подключите ниже</h3>
+        <p style="color:#94a3b8">Вставьте токен и ID Gist в поля. Эти данные хранятся локально на устройстве, никуда не отправляются (кроме самого GitHub).</p>
+      </div>
+
+      <label class="fld">Gist ID</label>
+      <input type="text" id="gist-id" placeholder="abc123def456..." autocomplete="off">
+      <label class="fld">GitHub Token (ghp_... или github_pat_...)</label>
+      <input type="password" id="gist-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top: 8px">
+        <button onclick="saveGistConfig()">💾 Сохранить настройки</button>
+        <button class="ghost" onclick="gistUpload()">⬆️ Отправить в облако</button>
+        <button class="ghost" onclick="gistDownload()">⬇️ Загрузить из облака</button>
+      </div>
+
+      <div id="gist-status" style="margin-top: 10px; font-size: 0.85em; color: #94a3b8"></div>
+
+      <div style="margin-top: 14px">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" id="autosync" onchange="toggleAutosync()" style="width:18px;height:18px;accent-color:#60a5fa">
+          <span style="font-size:0.9em">🔄 Автосинхронизация (отправлять в облако через 5 сек после изменений)</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📤 Локальный экспорт/импорт (резервная копия)</h2>
+      <p style="color:#94a3b8; font-size:0.85em">На случай, если что-то пошло не так с облаком.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px">
+        <button onclick="exportData()">⬇️ Скачать JSON</button>
+        <input type="file" id="import-file" accept=".json" style="background:none;border:none;padding:0;color:#94a3b8;font-size:0.85em">
+        <button onclick="importData()">⬆️ Загрузить</button>
+      </div>
     </div>
 
     <div class="card">
@@ -542,6 +579,8 @@ function loadData() {
 }
 function saveData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Триггерим автосинхронизацию, если она включена
+  if (typeof scheduleAutosync === 'function') scheduleAutosync();
 }
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -1178,6 +1217,156 @@ function clearAll() {
   toast('Всё очищено');
 }
 
+// ============ GIST SYNC ============
+const GIST_CONFIG_KEY = '1cdo_gist_config';
+const GIST_AUTOSYNC_KEY = '1cdo_autosync';
+let autosyncTimer = null;
+
+function loadGistConfig() {
+  try {
+    const raw = localStorage.getItem(GIST_CONFIG_KEY);
+    return raw ? JSON.parse(raw) : { id: '', token: '' };
+  } catch(e) { return { id: '', token: '' }; }
+}
+function saveGistConfig() {
+  const cfg = {
+    id: document.getElementById('gist-id').value.trim(),
+    token: document.getElementById('gist-token').value.trim(),
+  };
+  localStorage.setItem(GIST_CONFIG_KEY, JSON.stringify(cfg));
+  toast('Настройки сохранены');
+  updateGistStatus('Настройки сохранены. Нажмите "Загрузить из облака" чтобы проверить подключение.');
+}
+function updateGistStatus(msg, isError) {
+  const el = document.getElementById('gist-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#ef4444' : '#94a3b8';
+}
+
+async function gistUpload(silent) {
+  const cfg = loadGistConfig();
+  if (!cfg.id || !cfg.token) {
+    if (!silent) alert('Сначала укажите Gist ID и Token');
+    return false;
+  }
+  try {
+    if (!silent) updateGistStatus('⏳ Отправляю в облако...');
+    const payload = {
+      files: {
+        '1cdo-tracker.json': {
+          content: JSON.stringify({ ...data, _syncedAt: new Date().toISOString() }, null, 2)
+        }
+      }
+    };
+    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
+    updateGistStatus(`✅ Отправлено в облако в ${now}`);
+    if (!silent) toast('Отправлено в облако!');
+    return true;
+  } catch(err) {
+    updateGistStatus(`❌ Ошибка: ${err.message}`, true);
+    if (!silent) toast('Ошибка отправки');
+    return false;
+  }
+}
+
+async function gistDownload() {
+  const cfg = loadGistConfig();
+  if (!cfg.id || !cfg.token) {
+    alert('Сначала укажите Gist ID и Token');
+    return;
+  }
+  try {
+    updateGistStatus('⏳ Загружаю из облака...');
+    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
+      headers: {
+        'Authorization': `Bearer ${cfg.token}`,
+        'Accept': 'application/vnd.github+json',
+      }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    const gist = await resp.json();
+    const file = gist.files['1cdo-tracker.json'];
+    if (!file) throw new Error('Файл 1cdo-tracker.json не найден в Gist');
+    const cloudData = JSON.parse(file.content);
+    if (!cloudData || typeof cloudData !== 'object') throw new Error('Некорректные данные');
+
+    // Проверка: если в облаке "пусто" (только {}), не перезаписываем локальные
+    const cloudHasData = (cloudData.cases && cloudData.cases.length) ||
+                        (cloudData.freelance && cloudData.freelance.length) ||
+                        (cloudData.articles && cloudData.articles.length) ||
+                        (cloudData.tasks && Object.keys(cloudData.tasks).length);
+    const localHasData = data.cases.length || data.freelance.length || data.articles.length || Object.keys(data.tasks).length;
+
+    if (!cloudHasData && localHasData) {
+      if (!confirm('В облаке пусто, а локально есть данные. Точно загрузить пустое из облака? Лучше нажмите "Отмена" и сначала "Отправить в облако".')) return;
+    }
+
+    const cloudTime = cloudData._syncedAt || 'неизвестно';
+    if (!confirm(`Заменить локальные данные? Облачная версия: ${cloudTime}`)) return;
+
+    delete cloudData._syncedAt;
+    data = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...cloudData };
+    saveData();
+    renderAll();
+    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
+    updateGistStatus(`✅ Загружено из облака в ${now}`);
+    toast('Данные загружены!');
+  } catch(err) {
+    updateGistStatus(`❌ Ошибка: ${err.message}`, true);
+    toast('Ошибка загрузки');
+  }
+}
+
+function toggleAutosync() {
+  const on = document.getElementById('autosync').checked;
+  localStorage.setItem(GIST_AUTOSYNC_KEY, on ? '1' : '0');
+  if (on) {
+    const cfg = loadGistConfig();
+    if (!cfg.id || !cfg.token) {
+      alert('Сначала настройте Gist ID и Token');
+      document.getElementById('autosync').checked = false;
+      localStorage.setItem(GIST_AUTOSYNC_KEY, '0');
+      return;
+    }
+    updateGistStatus('🔄 Автосинхронизация включена (отправка через 5 сек после изменений)');
+  } else {
+    updateGistStatus('⏸ Автосинхронизация выключена');
+  }
+}
+
+function scheduleAutosync() {
+  if (localStorage.getItem(GIST_AUTOSYNC_KEY) !== '1') return;
+  clearTimeout(autosyncTimer);
+  autosyncTimer = setTimeout(() => {
+    gistUpload(true); // тихая отправка
+  }, 5000);
+}
+
+// Загружаем настройки при старте
+function initGistConfig() {
+  const cfg = loadGistConfig();
+  const idEl = document.getElementById('gist-id');
+  const tokenEl = document.getElementById('gist-token');
+  if (idEl) idEl.value = cfg.id || '';
+  if (tokenEl) tokenEl.value = cfg.token || '';
+  const autoEl = document.getElementById('autosync');
+  if (autoEl) autoEl.checked = localStorage.getItem(GIST_AUTOSYNC_KEY) === '1';
+  if (cfg.id && cfg.token) {
+    updateGistStatus('☁️ Подключено к Gist. Загрузите из облака для проверки.');
+  }
+}
+
 // ============ UTILS ============
 function escapeHtml(s) {
   if (s == null) return '';
@@ -1202,6 +1391,7 @@ if (firstActive) openWeeks[firstActive.id] = true;
 // Init
 renderAll();
 initDates();
+initGistConfig();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a109da017eacf12f',t:'MTc4MjI4NDM4NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
