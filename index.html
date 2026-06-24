@@ -103,6 +103,69 @@
     transition: width 0.3s;
   }
 
+  /* Lessons */
+  .lesson-week {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .lesson-week summary {
+    padding: 12px 14px;
+    cursor: pointer;
+    font-weight: 700;
+    color: #cbd5e1;
+    font-size: 0.93em;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .lesson-week summary::-webkit-details-marker { display: none; }
+  .lesson-week summary::before {
+    content: '▶';
+    color: #60a5fa;
+    margin-right: 6px;
+    transition: transform 0.2s;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .lesson-week[open] summary::before { transform: rotate(90deg); }
+  .lesson-week[open] > summary {
+    background: linear-gradient(90deg, rgba(96,165,250,0.2), rgba(167,139,250,0.2));
+  }
+  .lesson-week-body { padding: 8px 16px 14px; }
+  .lesson-block {
+    background: rgba(15, 23, 42, 0.4);
+    border-left: 3px solid #06b6d4;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 10px 0;
+  }
+  .lesson-block h4 { margin: 0 0 6px; color: #93c5fd; font-size: 0.92em; }
+  .lesson-block ul, .lesson-block ol { margin: 4px 0; padding-left: 22px; font-size: 0.88em; color: #cbd5e1; }
+  .lesson-block li { margin: 3px 0; }
+  .lesson-block a { color: #60a5fa; }
+  .lesson-block.materials { border-left-color: #06b6d4; background: rgba(6, 182, 212, 0.08); }
+  .lesson-block.materials h4 { color: #67e8f9; }
+  .lesson-block.do_tasks { border-left-color: #16a34a; background: rgba(22, 163, 74, 0.08); }
+  .lesson-block.do_tasks h4 { color: #86efac; }
+  .lesson-block.check { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.08); }
+  .lesson-block.check h4 { color: #fcd34d; }
+  details.qa {
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(219, 39, 119, 0.3);
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 4px 0;
+    font-size: 0.88em;
+  }
+  details.qa summary { cursor: pointer; color: #f9a8d4; font-weight: 600; list-style: none; }
+  details.qa summary::before { content: '💡 '; }
+  details.qa .ans { padding-top: 6px; color: #cbd5e1; border-top: 1px dashed rgba(219, 39, 119, 0.3); margin-top: 6px; }
+
   /* Tasks (checklist) */
   .week {
     background: rgba(15, 23, 42, 0.5);
@@ -266,6 +329,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="dash">📊 Главная</button>
     <button class="tab" data-tab="tasks">✅ Задачи</button>
+    <button class="tab" data-tab="learn">📘 Обучение</button>
     <button class="tab" data-tab="cases">🔧 Кейсы</button>
     <button class="tab" data-tab="freelance">💼 Фриланс</button>
     <button class="tab" data-tab="articles">✍️ Статьи</button>
@@ -298,6 +362,16 @@
       <h2>✅ Чек-лист по неделям</h2>
       <div class="subtitle" style="margin-bottom: 10px">Отмечайте сделанное. Прогресс автоматически попадает на главную.</div>
       <div id="weeks-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ ОБУЧЕНИЕ ============ -->
+  <div class="panel" id="panel-learn">
+    <div class="card">
+      <h2>📘 Система обучения</h2>
+      <div class="subtitle" style="margin-bottom: 10px">Уроки, материалы и задания для каждой недели. Используйте параллельно с чек-листом задач.</div>
+      <div id="learn-current-card" style="background: linear-gradient(135deg, rgba(96,165,250,0.15), rgba(167,139,250,0.15)); border: 1px solid rgba(96,165,250,0.3); border-radius: 12px; padding: 14px; margin-bottom: 14px;"></div>
+      <div id="lessons-list"></div>
     </div>
   </div>
 
@@ -536,6 +610,42 @@
           <input type="number" id="salary-target" placeholder="210000" onchange="saveSalary()">
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>🔔 Уведомления (для рабочего компьютера)</h2>
+      <p style="color:#94a3b8; font-size:0.88em">Браузер будет показывать пуш-уведомления о начале учебной сессии и напоминания о невыполненных задачах. Работает, пока трекер открыт в браузере (даже в фоновой вкладке).</p>
+
+      <div id="notif-status" style="margin: 10px 0; padding: 10px 14px; border-radius: 8px; font-size: 0.88em;"></div>
+
+      <button onclick="requestNotifPermission()" id="btn-notif-perm">🔓 Разрешить уведомления</button>
+      <button class="ghost" onclick="testNotification()">🧪 Тест уведомления</button>
+
+      <h3 style="margin-top:18px">⏰ Расписание учебных сессий (по дням недели)</h3>
+      <p style="color:#94a3b8; font-size:0.85em">Уведомление прилетит за 5 минут до начала сессии</p>
+
+      <table style="width:100%; font-size:0.88em;">
+        <tr><th style="text-align:left; padding:6px">День</th><th style="text-align:left; padding:6px">Время</th><th style="text-align:left; padding:6px">Включить</th></tr>
+        <tr><td>Понедельник</td><td><input type="time" id="t-mon" value="09:00" onchange="saveSchedule()" style="margin:0;padding:4px 8px;width:100px;"></td><td><input type="checkbox" id="e-mon" onchange="saveSchedule()"></td></tr>
+        <tr><td>Вторник</td><td><input type="time" id="t-tue" value="14:00" onchange="saveSchedule()" style="margin:0;padding:4px 8px;width:100px;"></td><td><input type="checkbox" id="e-tue" onchange="saveSchedule()"></td></tr>
+        <tr><td>Среда</td><td><input type="time" id="t-wed" value="09:00" onchange="saveSchedule()" style="margin:0;padding:4px 8px;width:100px;"></td><td><input type="checkbox" id="e-wed" onchange="saveSchedule()"></td></tr>
+        <tr><td>Четверг</td><td><input type="time" id="t-thu" value="14:00" onchange="saveSchedule()" style="margin:0;padding:4px 8px;width:100px;"></td><td><input type="checkbox" id="e-thu" onchange="saveSchedule()"></td></tr>
+        <tr><td>Пятница</td><td><input type="time" id="t-fri" value="09:00" onchange="saveSchedule()" style="margin:0;padding:4px 8px;width:100px;"></td><td><input type="checkbox" id="e-fri" onchange="saveSchedule()"></td></tr>
+      </table>
+
+      <h3 style="margin-top:18px">📌 Дополнительные напоминания</h3>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:6px 0">
+        <input type="checkbox" id="notif-evening-summary" onchange="saveNotifPrefs()" style="width:18px;height:18px;accent-color:#60a5fa">
+        <span style="font-size:0.9em">📊 Вечером (18:00) — итоги дня + что не выполнено</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:6px 0">
+        <input type="checkbox" id="notif-milestone" onchange="saveNotifPrefs()" style="width:18px;height:18px;accent-color:#60a5fa">
+        <span style="font-size:0.9em">🏆 Напоминать о ключевых вехах за день (сдача, публикация, разговор о повышении)</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:6px 0">
+        <input type="checkbox" id="notif-monday-summary" onchange="saveNotifPrefs()" style="width:18px;height:18px;accent-color:#60a5fa">
+        <span style="font-size:0.9em">🗓 По понедельникам (09:00) — план на неделю</span>
+      </label>
     </div>
 
     <div class="card">
@@ -780,6 +890,458 @@ const WEEKS = [
     { id: 't4', date: 'Чт 24', text: '🎄 С наступающим! Отдых до 8 января' },
   ]},
 ];
+
+// ============ LESSONS (Программа обучения) ============
+const LESSONS = {
+  'w1': {
+    title: 'Старт + знакомство с ДО',
+    summary: 'Развернуть локально обе версии ДО, освоить навигацию, завести инфраструктуру обучения.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'releases.1c.ru — скачать дистрибутивы Документооборот КОРП ред. 2.1 и 3.0',
+        'Книга «1С:Документооборот. 200 вопросов и ответов» (А. Бескровный, ~1.5к ₽)',
+        'Статья: «Новое в 1С:Документооборот 3.0» (sb-vnedr.ru/blog)',
+        'Сайт Инфостарт (infostart.ru) — регистрация + 5 подписок на авторов по ДО'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Установить через setup.exe дистрибутивы 2.1 и 3.0 в папку шаблонов',
+        'Создать локальные базы из шаблонов с демо-данными',
+        'Войти администратором в каждую, обойти все разделы по 10 минут',
+        'Завести журнал кейсов (Notion / трекер) с полями: дата/задача/решение/версия ДО/эффект'
+      ]},
+      { type: 'check', title: '✅ Самопроверка', items: [
+        'Можете назвать 5 разделов в ДО 2.1?',
+        'Можете найти раздел «Документы» в ДО 3.0?',
+        'Заметили хотя бы 3 визуальных отличия 3.0 от 2.1?'
+      ]},
+      { type: 'qa', items: [
+        ['В чём ключевое отличие архитектуры ДО 2.1 от 3.0?', 'В ДО 2.1 — три отдельных справочника (Входящие, Исходящие, Внутренние). В ДО 3.0 — единый справочник «Документы», направление задаётся флажком на виде.'],
+        ['Где хранятся шаблоны 1С по умолчанию?', '%APPDATA%\\1C\\1cv8\\tmplts. Путь можно изменить в окне списка баз → Настройка.'],
+        ['Какая платформа нужна для ДО 3.0?', 'Минимум 8.3.21+, для свежих релизов рекомендуется 8.3.22 или 8.3.24.']
+      ]}
+    ]
+  },
+  'w2': {
+    title: 'Документы, виды, нумерация',
+    summary: 'Разобрать справочник документов, освоить настройку видов, нумерации, шаблонов файлов.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Книга «200 вопросов», главы «Архитектура системы», «Виды документов», «Нумерация», «Шаблоны файлов»',
+        'Методика внедрения 1С:ДО (its.1c.ru) — раздел «Настройка видов документов»',
+        'Статьи на Инфостарте по запросу «Настройка нумерации в ДО»'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Создать 5 видов документов: Договор поставки, Входящее письмо, Исходящее письмо, Приказ, Служебная записка',
+        'Настроить 3 разных нумератора (с префиксом, годом, ведущими нулями)',
+        'Создать шаблон договора в Word с автозаполнением реквизитов',
+        'Реализовать кейс связей: договор → допсоглашение → акт',
+        'ЗАПИСАТЬСЯ на сдачу Профессионала на октябрь (~5к ₽)'
+      ]},
+      { type: 'check', title: '✅ Самопроверка', items: [
+        'Чем «Внутренний документ» отличается от «Исходящего»?',
+        'Что такое «Состав файлов» в виде документа?',
+        'Что произойдёт, если у нумератора не указать период?',
+        'Как сделать сквозную нумерацию по нескольким видам?'
+      ]},
+      { type: 'qa', items: [
+        ['Что такое «Папка документов» в ДО 2.1?', 'Структурная единица хранения и разграничения прав доступа. Документы лежат в папках, на папки выдаются права. В ДО 3.0 концепция изменилась — папок там нет.'],
+        ['В каком случае используется «Связь произвольного типа»?', 'Когда стандартных типов связей недостаточно. Можно создать свой тип в справочнике «Типы связей».']
+      ]}
+    ]
+  },
+  'w3': {
+    title: 'Процессы в ДО 2.1 — комплексные шаблоны',
+    summary: 'Освоить главный механизм 2.1 — комплексные процессы с условной маршрутизацией.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Книга «200 вопросов» — глава «Бизнес-процессы»',
+        'Методика → раздел «Обработка документов»',
+        '2 разбора сложных шаблонов на Инфостарте (поиск «шаблон процесса ДО»)'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Составить таблицу всех 8 типов действий: Согласование, Утверждение, Подписание, Регистрация, Рассмотрение, Ознакомление, Исполнение, Поручение',
+        'Создать шаблон «Согласование договора»: юрист → финансист → директор → регистрация',
+        'Усложнить шаблон условной маршрутизацией по сумме (< 100к / 100к-1млн / > 1млн)',
+        'Создать 3 тестовых договора с разными суммами, проверить маршрут'
+      ]},
+      { type: 'check', title: '✅ Самопроверка', items: [
+        'В чём разница «Согласование» и «Утверждение»?',
+        'Чем отличается «Рассмотрение» от «Ознакомления»?',
+        'Что такое «контейнер исполнителей» и зачем он нужен?'
+      ]},
+      { type: 'qa', items: [
+        ['Можно ли передать в условие маршрутизации значение реквизита документа?', 'Да, в условиях шаблона процесса доступны все реквизиты документа-предмета и можно сравнивать с константами или другими реквизитами.'],
+        ['Как сделать, чтобы условие зависело от роли подписанта?', 'Через функцию проверки наличия пользователя в роли. Реализуется обычно через настройку «Маршрутизация по ролям» в шаблоне процесса.']
+      ]}
+    ]
+  },
+  'w4': {
+    title: 'Автозапуск + мероприятия + старт прав',
+    summary: 'Закрепить процессы 2.1, освоить мероприятия/проекты, начать тему прав доступа.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Методика → разделы «Автозапуск процессов», «Мероприятия», «Профили групп доступа»',
+        'Книга «200 вопросов» — соответствующие главы'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Настроить автозапуск шаблона при создании документа «Договор поставки»',
+        'Добавить условие автозапуска (только если заполнена сумма)',
+        'Создать тестовое мероприятие «Совещание по итогам Q3» с участниками и протоколом',
+        'Создать 3 профиля прав: Бухгалтер, Юрист, Менеджер',
+        'Войти под каждым пользователем, проверить видимость'
+      ]},
+      { type: 'check', title: '✅ Самопроверка', items: [
+        'Где настраивается автозапуск — в виде документа или в шаблоне процесса?',
+        'Что произойдёт, если автозапуск настроен, а шаблона нет?',
+        'Можно ли отключить автозапуск для конкретного документа?'
+      ]}
+    ]
+  },
+  'w5': {
+    title: 'Папочная модель прав в ДО 2.1',
+    summary: 'Глубоко освоить главный механизм прав 2.1: папки, наследование, рабочие группы, разграничение по орг.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Методика → «Папки документов», «Наследование прав», «Разграничение по организациям»',
+        'Статьи на Инфостарте: «частые проблемы с правами в ДО 2.1»'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Создать иерархию папок: Договоры/Поставщики, Договоры/Подрядчики, Письма/Входящие, Письма/Исходящие',
+        'Настроить наследование прав от родительских папок',
+        'Расставить права: разные профили видят разные папки',
+        'Реализовать кейс с 3 юрлицами в одной базе',
+        'Сделать сложный кейс с матричной структурой (3 ЮЛ + пересекающиеся отделы)'
+      ]},
+      { type: 'qa', items: [
+        ['Какой принцип прав в ДО 2.1: «по умолчанию запрещено» или «по умолчанию разрешено»?', 'По умолчанию РАЗРЕШЕНО. Папка/документ доступен всем, у кого нет явного запрета. В ДО 3.0 концепция перевёрнута — там по умолчанию запрещено.'],
+        ['Что такое «Особый порядок прав»?', 'Возможность переопределить наследованные права для конкретного документа или папки. Включается флагом «Особый порядок прав».'],
+        ['Можно ли скрыть один файл вложения от пользователя с доступом к документу?', 'Можно — если включена настройка «Использовать ограничение доступа к файлам». Иначе файлы наследуют права от документа.']
+      ]}
+    ]
+  },
+  'w6': {
+    title: 'ЭДО + завершение 2.1',
+    summary: 'Освоить блок электронного документооборота, закрыть основной круг тем ДО 2.1.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        '63-ФЗ «Об электронной подписи» — обзорно',
+        'Методика → раздел «Работа с электронной подписью»',
+        'Демо-аккаунт в Контур.Диадок или СБИС'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Выписать виды ЭП (простая, УНЭП, УКЭП), понять, кто какой пользуется',
+        'Получить тестовый аккаунт оператора ЭДО',
+        'Настроить подключение к ДО 2.1, отправить тестовый документ',
+        'Большой кейс «Договор от создания до архива»: шаблон → согласование → ЭП → регистрация → файлы'
+      ]},
+      { type: 'qa', items: [
+        ['Какие 3 версии ЭП существуют по 63-ФЗ?', 'Простая, усиленная неквалифицированная (УНЭП), усиленная квалифицированная (УКЭП). Для юридически значимых документов в РФ — обычно УКЭП.'],
+        ['Что такое МЧД и где применяется?', 'Машиночитаемая доверенность — электронный документ полномочий представителя. С 2023 года все документы между организациями должны подписываться с использованием МЧД для подписанта-физлица.']
+      ]}
+    ]
+  },
+  'w7': {
+    title: 'Старт ДО 3.0: тематики и реестры',
+    summary: 'Обзор архитектурных изменений 3.0, освоение реестров и тематик — главных новшеств.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'doc-lvv.ru: «Ключевые отличия ДО 3.0 от 2.1»',
+        'sb-vnedr.ru: «Новое в ДО 3.0 — мнение клиентов»',
+        'rg-soft.ru: «Сравнение функционала 2.1 и 3.0»',
+        'Файл do_compare_2_1_vs_3_0.html (ваша шпаргалка)'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Прочитать 3 обзора, составить свою таблицу «10 главных отличий»',
+        'Создать 3 настраиваемых реестра на стартовой странице (мои на согласовании, входящие сегодня, ждущие подписания)',
+        'Создать вид «Договор» с 3 тематиками (Типовой, Инвестиционный, Рамочный)',
+        'Настроить роли файлов: Скан оригинала (обязательно), Подписанный PDF (обязательно), Приложение (множественно)'
+      ]},
+      { type: 'qa', items: [
+        ['Чем тематика отличается от вида?', 'Вид — это «класс» документа (Договор, Письмо). Тематика — это вариация внутри вида с разным процессом и реквизитами. Один вид может иметь много тематик, но не наоборот.'],
+        ['Можно ли у одного документа быть несколько тематик?', 'Нет, у документа всегда одна тематика. Если нужны разные сценарии — создаются разные тематики, документ попадает в нужную при создании.']
+      ]}
+    ]
+  },
+  'w8': {
+    title: 'Новая модель обработки в ДО 3.0',
+    summary: 'Главное концептуальное отличие 3.0: «обработка на виде» вместо комплексных процессов.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        '1c-kpd.ru: «Новый механизм обработки в 3.0»',
+        'Методика → раздел «Обработка документов в ДО 3.0»'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Для вида «Договор» настроить обработку из 3 этапов: согласование → подписание → регистрация',
+        'Добавить условную ветку по сумме',
+        'Настроить разворачивание исполнителей в 3 режимах (при заполнении / при запуске / перед действием)',
+        'Реализовать кейс «Служебная записка» с разными маршрутами для HR / IT / Продажи'
+      ]},
+      { type: 'qa', items: [
+        ['Где в ДО 3.0 настраивается обработка документа?', 'В карточке Вида документа на закладке «Настройка обработки». В 2.1 это были отдельные «Шаблоны процессов» в общем справочнике.'],
+        ['Что такое «разрезы правил обработки»?', 'Возможность настроить разные маршруты обработки для одного вида в зависимости от тематики, организации, подразделения и других реквизитов.']
+      ]}
+    ]
+  },
+  'w9': {
+    title: 'Права доступа в ДО 3.0 — новая модель',
+    summary: 'Перевёрнутая концепция: «по умолчанию запрещено», рабочие группы, замещения и помощники.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Методика ИТС → раздел «Управление доступом в ДО 3.0»'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Конспект тезисов модели прав 3.0 + схема сравнения 2.1 vs 3.0',
+        'Создать документ, проверить видимость от 5 разных пользователей',
+        'Настроить рабочие группы для разных видов документов',
+        'Назначить замещение, проверить от лица замещающего',
+        'Воспроизвести в 3.0 кейс с 3 юрлицами и матричной структурой',
+        'Журнал: «5 граблей при переносе прав из 2.1 в 3.0»'
+      ]}
+    ]
+  },
+  'w10': {
+    title: 'Интеграция ДО с ERP/БП',
+    summary: 'Освоить типовой обмен, HTTP-сервисы, кейсы реальной интеграции.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Методика ИТС → «Обмен данными ДО ↔ ERP»',
+        'Описание планов обмена в типовых конфигурациях',
+        'Купить сборник вопросов «1С:Профессионал по ДО» на Инфостарте (~1.5к ₽)'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Скачать и развернуть демо-ERP (или демо-БП)',
+        'Настроить план обмена ДО ↔ ERP, выполнить первый обмен',
+        'В Postman отправить тестовый HTTP-запрос «Получить список документов»',
+        'Полный цикл: документ из ERP → согласование в ДО → результат обратно в ERP'
+      ]}
+    ]
+  },
+  'w11': {
+    title: 'Подготовка к экзамену: старт',
+    summary: 'Начинаем систематически прорешивать сборник вопросов, выявляем слабые темы.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Что делать каждый день', items: [
+        'Прорешать 15-20 вопросов из сборника',
+        'Фиксировать неверные ответы в документ «Слабые темы» с пояснением',
+        'Каждый сложный момент перепроверять руками в демо-базе',
+        'В четверг — ПРОБНЫЙ ЭКЗАМЕН №1 (60 вопросов на время 40 мин)',
+        'В пятницу — подсчёт % верных за неделю, разбор частых ошибок'
+      ]}
+    ]
+  },
+  'w12': {
+    title: 'Подготовка к экзамену: добиваем слабые темы',
+    summary: 'Фокус на проблемных темах. Цель — повысить % верных до 80+.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Что делать', items: [
+        'Перечитать раздел методики по самой слабой теме',
+        'Прорешать по 20 вопросов на каждую слабую тему',
+        'Руками воспроизвести в демо всё, по чему ошибались',
+        'В четверг — ПРОБНЫЙ ЭКЗАМЕН №2 (сравнить с первым)',
+        'В пятницу: если < 80% — ещё неделя подготовки, если 80%+ — идём на сдачу'
+      ]}
+    ]
+  },
+  'w13': {
+    title: 'Финальная подготовка к экзамену',
+    summary: 'Довести до уверенных 85%+. Главное — пройти руками все сложные кейсы.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Что делать', items: [
+        'По 20 вопросов микс каждый день',
+        'Пройти руками ВСЕ сложные кейсы в демо: тематики, обработка, права',
+        'Повторение по конспекту, отработка топ-3 проблемных тем',
+        'В четверг — ФИНАЛЬНЫЙ ПРОБНЫЙ ЭКЗАМЕН',
+        'В пятницу: ПОДТВЕРДИТЬ запись на сдачу. Подготовить паспорт, ноутбук, интернет'
+      ]}
+    ]
+  },
+  'w14': {
+    title: 'СДАЧА ПРОФЕССИОНАЛА',
+    summary: '🎉 Главное событие полугодия. Сразу после — обновление резюме и разговор с руководителем.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 По дням', items: [
+        'Пн (5 окт): лёгкое повторение + 15 вопросов',
+        'Вт (6 окт): только повторение, ранний сон',
+        'Ср (7 окт): СДАЧА ЭКЗАМЕНА',
+        'Чт (8 окт): обновить резюме и LinkedIn',
+        'Пт (9 окт): празднуем + план фриланса'
+      ]},
+      { type: 'check', title: '⚠️ Если не сдал', items: [
+        'Это норма для ~30% сдающих в первый раз',
+        'Пересдача через 2 недели возможна',
+        'Записать в журнал, какие темы провалили',
+        '2 недели интенсивной подготовки по слабым темам',
+        'Сдать со второго раза'
+      ]}
+    ]
+  },
+  'w15': {
+    title: 'Самозанятость + старт фриланса',
+    summary: 'Запуск дополнительного дохода через биржу Инфостарта и TG-чаты.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 По дням', items: [
+        'Пн: оформить самозанятость в «Мой налог» (10 мин)',
+        'Вт: создать профиль на бирже Инфостарта (сертификат, кейсы, ставка 2500₽/час)',
+        'Ср: подписаться на 8-10 TG-каналов с заказами 1С, написать 3 шаблона откликов',
+        'Чт: первые отклики на 10-12 заявок',
+        'Пт: анализ конверсии (отклики → ответы), журнал «опыт первой недели»'
+      ]}
+    ]
+  },
+  'w16': {
+    title: 'Методика миграции 2.1 → 3.0',
+    summary: 'Глубокое изучение технологии миграции — главной компетенции на 2026-2028.',
+    blocks: [
+      { type: 'materials', title: '📚 Материалы', items: [
+        'Официальная методика перехода 2.1 → 3.0 (на ИТС)',
+        'sb-vnedr.ru: «Технические особенности перехода»',
+        'alsn.ru: «Переход с Документооборота 2.1 на 3.0»'
+      ]},
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Прочитать всю методику',
+        'Конспект: «что переносится автоматически, что вручную»',
+        'Нарисовать схему миграции в Notion',
+        'Параллельно: отклики на 5 фриланс-заявок в день'
+      ]}
+    ]
+  },
+  'w17': {
+    title: 'Первая тест-миграция + статья',
+    summary: 'Реальная практика миграции на учебной базе. Начинаем черновик статьи на Инфостарт.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Подготовить две базы: ДО 2.1 (источник) и ДО 3.0 (приёмник)',
+        'Заполнить 2.1 тестовыми данными: 10 видов, 50 документов, 5 пользователей, права',
+        'Запустить штатный обмен через каталог. Зафиксировать все ошибки',
+        'Проверить корректность переноса прав, документов, процессов',
+        'Написать черновик статьи: «5 граблей при миграции тестовой базы ДО 2.1 → 3.0»'
+      ]},
+      { type: 'check', title: '✅ Самопроверка', items: [
+        'Сколько % данных перенеслось без ошибок?',
+        'Какие 3 самых частых ошибки встретились?',
+        'Что НЕ перенеслось вообще и почему?'
+      ]}
+    ]
+  },
+  'w18': {
+    title: 'Миграция с кастомом + финализация статьи',
+    summary: 'Усложняем кейс миграции, доводим статью до публикации.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'В базе 2.1 создать кастомное расширение (новый реквизит, новый процесс)',
+        'Запустить миграцию — посмотреть, как переезжает кастом',
+        'Изучить, как комплексные процессы 2.1 ложатся на модель обработки 3.0',
+        'Доработать структуру статьи, добавить разделы и скриншоты',
+        'Финальная вычитка, отложить на 3-4 дня для «отлёжки»'
+      ]},
+      { type: 'qa', items: [
+        ['Какие данные НЕ переносятся при штатной миграции?', 'Шаблоны комплексных процессов 2.1 (модель в 3.0 другая), кастомные доработки в самой конфигурации, специальные настройки прав по «Особому порядку».'],
+        ['Можно ли мигрировать «частями»?', 'Да, есть механизм «Выгрузить/Загрузить» для точечной миграции отдельных объектов.']
+      ]}
+    ]
+  },
+  'w19': {
+    title: 'ПУБЛИКАЦИЯ СТАТЬИ',
+    summary: '🎉 Первая публикация на Инфостарте. Старт личного бренда.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 По дням', items: [
+        'Пн: финальная вычитка статьи, прочитать вслух',
+        'Вт: опубликовать на Инфостарте, расшарить в TG-чатах',
+        'Ср: отвечать на комментарии, изучать механизм «Выгрузить/Загрузить»',
+        'Чт: точечная миграция — практика с 10 документами',
+        'Пт: журнал «опыт первой публикации» (просмотры, комментарии)'
+      ]}
+    ]
+  },
+  'w20': {
+    title: 'Чек-лист миграции как «продукт»',
+    summary: 'Превращаем накопленный опыт в готовый чек-лист для будущей продажи / портфолио.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Чтение про аудит прав после миграции',
+        'Реальный кейс — полный аудит прав в тестовой базе',
+        'Статьи про интеграцию ДО 3.0 с 1С:Архив',
+        'Оформить готовый «Чек-лист миграции 2.1 → 3.0» в Notion',
+        'Это и портфолио, и ваш будущий продукт'
+      ]}
+    ]
+  },
+  'w21': {
+    title: 'Резюме + рассылка в 20 компаний',
+    summary: 'Подготовка к финальной волне собеседований и переговоров о повышении.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 По дням', items: [
+        'Пн: обновить резюме (сертификат, статья, фриланс-кейсы, опыт миграции)',
+        'Вт: написать сильное саммари + список достижений с цифрами',
+        'Ср: сопроводительные письма + рассылка в 10 компаний',
+        'Чт: остальные 10 + обработка откликов',
+        'Пт: назначить собесы, подготовить вопросы работодателю'
+      ]},
+      { type: 'materials', title: '🎯 Куда рассылать', items: [
+        'Софтбаланс, КПД, РГ-Софт (топ-интеграторы ДО)',
+        '1С-Рарус, WiseAdvice, Первый Бит (крупные франчайзи)',
+        'Крупные холдинги с собственным ДО (Магнит, X5, банки)',
+        'Удалёнка на московские компании из вашего региона'
+      ]}
+    ]
+  },
+  'w22': {
+    title: 'Собеседования (волна 1)',
+    summary: '2-3 собеседования за неделю. Цель — получить хотя бы 1 оффер.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Изучить компании, прочитать вакансии',
+        'Повторить «топ-10 отличий 2.1 vs 3.0», проговорить кейсы вслух',
+        'Пройти 2-3 собеседования',
+        'После каждого — быстрый разбор: что прошло, что улучшить',
+        'Собирать офферы в одном файле для сравнения'
+      ]}
+    ]
+  },
+  'w23': {
+    title: 'Собеседования (волна 2) + письменный оффер',
+    summary: 'Финальные интервью. Получить хотя бы один письменный оффер для переговоров.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Практика', items: [
+        'Финальные интервью / технические задания',
+        'Переговоры по офферам — торгуемся по ЗП',
+        'Получить ПИСЬМЕННЫЙ оффер. Если несколько — сравнить таблицей',
+        'Подготовка к разговору с текущим руководителем: журнал + сертификат + статья + оффер',
+        'Прорепетировать главные тезисы вслух'
+      ]}
+    ]
+  },
+  'w24': {
+    title: 'РАЗГОВОР О ПОВЫШЕНИИ',
+    summary: '🎯 Кульминация года. Получить +15-30к ₽ к окладу или принять решение о переходе.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Структура разговора', items: [
+        'Что сделал за полгода (показать журнал кейсов)',
+        'Получил сертификат 1С:Профессионал по ДО',
+        'Опубликовал статью на Инфостарте с N просмотров',
+        'На рынке получил оффер на M ₽',
+        'Прошу пересмотреть оклад до Z ₽ — или давайте обсудим план «как к марту»'
+      ]},
+      { type: 'check', title: '📝 Если откажут полностью без плана', items: [
+        'Это сигнал, что компания не готова в вас вкладываться',
+        'Принимаете один из офферов с рынка',
+        'Передача дел, благодарность, уход'
+      ]}
+    ]
+  },
+  'w25': {
+    title: 'Итоги + план на 2027',
+    summary: '🎄 Перечитать журнал, выделить главные уроки, составить план на следующий год.',
+    blocks: [
+      { type: 'do_tasks', title: '🛠 Что сделать', items: [
+        'Перечитать журнал кейсов за полгода — выделить топ-10 для портфолио',
+        'Записать «10 главных уроков 2026»',
+        'План на январь-март 2027: 2-й Профессионал (по 3.0), потом Специалист-консультант по ДО, ставка фриланса 3500+ ₽/час',
+        'Отдых с 24 декабря до 8 января'
+      ]}
+    ]
+  }
+};
 
 const MILESTONES = [
   { date: '25 июня', title: 'Журнал кейсов и обе базы развёрнуты', taskRef: ['w1','t3'] },
@@ -1032,9 +1594,72 @@ function renderSettings() {
   document.getElementById('goals-edit').innerHTML = goalsHtml;
 }
 
+function renderLessons() {
+  const list = document.getElementById('lessons-list');
+  if (!list) return;
+
+  // Подсветим текущую активную неделю
+  const activeWeek = WEEKS.find(w => !w.vacation && w.tasks.some(t => !data.tasks[`${w.id}-${t.id}`]));
+  const curCard = document.getElementById('learn-current-card');
+  if (curCard && activeWeek && LESSONS[activeWeek.id]) {
+    const lesson = LESSONS[activeWeek.id];
+    curCard.innerHTML = `
+      <div style="font-size:0.78em; color:#94a3b8; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px">📍 Сейчас на этой неделе</div>
+      <div style="font-weight:700; font-size:1.05em; margin-bottom:4px">${escapeHtml(activeWeek.title)}</div>
+      <div style="font-size:0.88em; color:#cbd5e1; margin-bottom:6px">📘 ${escapeHtml(lesson.title)}</div>
+      <div style="font-size:0.84em; color:#94a3b8">${escapeHtml(lesson.summary)}</div>
+      <button class="small" style="margin-top:8px" onclick="document.getElementById('week-lesson-${activeWeek.id}').setAttribute('open','true');document.getElementById('week-lesson-${activeWeek.id}').scrollIntoView({behavior:'smooth'})">📖 Перейти к уроку</button>
+    `;
+  } else if (curCard) {
+    curCard.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:10px">🎉 Все недели пройдены или сейчас отпуск!</div>`;
+  }
+
+  // Все уроки
+  const html = WEEKS.filter(w => !w.vacation && LESSONS[w.id]).map(w => {
+    const lesson = LESSONS[w.id];
+    const isActive = activeWeek && activeWeek.id === w.id;
+    const blocksHtml = (lesson.blocks || []).map(b => {
+      if (b.type === 'qa') {
+        const qaItems = b.items.map(([q, a]) => `
+          <details class="qa">
+            <summary>${escapeHtml(q)}</summary>
+            <div class="ans">${escapeHtml(a)}</div>
+          </details>
+        `).join('');
+        return `<div class="lesson-block check"><h4>💭 Контрольные вопросы</h4>${qaItems}</div>`;
+      }
+      const itemsHtml = (b.items || []).map(it => `<li>${escapeHtml(it)}</li>`).join('');
+      const tag = b.type === 'do_tasks' ? 'ol' : 'ul';
+      return `
+        <div class="lesson-block ${b.type}">
+          <h4>${escapeHtml(b.title || '')}</h4>
+          <${tag}>${itemsHtml}</${tag}>
+        </div>
+      `;
+    }).join('');
+    return `
+      <details class="lesson-week" id="week-lesson-${w.id}" ${isActive ? 'open' : ''}>
+        <summary>
+          <span>${escapeHtml(w.title.replace(/^Неделя \d+ · /, ''))}</span>
+          <span style="font-size:0.75em; color:#60a5fa">${isActive ? '📍 Сейчас' : ''}</span>
+        </summary>
+        <div class="lesson-week-body">
+          <div style="color:#94a3b8; font-size:0.88em; margin-bottom:10px; padding: 6px 10px; background: rgba(15,23,42,0.4); border-radius:6px">
+            <b style="color:#cbd5e1">${escapeHtml(lesson.title)}</b><br>
+            ${escapeHtml(lesson.summary)}
+          </div>
+          ${blocksHtml}
+        </div>
+      </details>
+    `;
+  }).join('');
+  list.innerHTML = html;
+}
+
 function renderAll() {
   renderDash();
   renderTasks();
+  renderLessons();
   renderCases();
   renderFreelance();
   renderArticles();
@@ -1528,170 +2153,250 @@ function _saveDataRaw() {
 }
 
 // Загружаем настройки при старте
-function updateGistStatus(msg, isError) {
-  const el = document.getElementById('gist-status');
+// ============ NOTIFICATIONS ============
+const NOTIF_SCHEDULE_KEY = '1cdo_notif_schedule';
+const NOTIF_PREFS_KEY = '1cdo_notif_prefs';
+const NOTIF_SHOWN_KEY = '1cdo_notif_shown'; // дата + ключ, чтобы не дублировать
+let notifCheckTimer = null;
+
+function getNotifStatus() {
+  const el = document.getElementById('notif-status');
+  const btn = document.getElementById('btn-notif-perm');
   if (!el) return;
-  el.textContent = msg;
-  el.style.color = isError ? '#ef4444' : '#94a3b8';
-}
-
-async function gistUpload(silent) {
-  const cfg = loadGistConfig();
-  if (!cfg.id || !cfg.token) {
-    if (!silent) alert('Сначала укажите Gist ID и Token');
-    return false;
-  }
-  // Базовая валидация
-  if (cfg.token.startsWith('github_pat_')) {
-    updateGistStatus('⚠️ У вас Fine-grained token (github_pat_...) — он НЕ работает с Gist API. Создайте Classic token (ghp_...) на github.com/settings/tokens', true);
-    if (!silent) alert('Fine-grained tokens (github_pat_...) не поддерживают Gist API. Нужен Classic token, начинающийся с ghp_');
-    return false;
-  }
-  if (cfg.id.includes('/') || cfg.id.length < 20) {
-    updateGistStatus('⚠️ Gist ID выглядит некорректно. Должна быть длинная строка из букв и цифр без слешей.', true);
-    if (!silent) alert('Gist ID должен быть длинной строкой из букв и цифр (например: 7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d). Без логина и слешей!');
-    return false;
-  }
-  try {
-    if (!silent) updateGistStatus('⏳ Отправляю в облако...');
-    const payload = {
-      files: {
-        '1cdo-tracker.json': {
-          content: JSON.stringify({ ...data, _syncedAt: new Date().toISOString() }, null, 2)
-        }
-      }
-    };
-    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${cfg.token}`,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(`HTTP ${resp.status}: ${errText}`);
-    }
-    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
-    updateGistStatus(`✅ Отправлено в облако в ${now}`);
-    if (!silent) toast('Отправлено в облако!');
-    return true;
-  } catch(err) {
-    const friendly = explainError(err.message);
-    updateGistStatus(`❌ ${friendly}`, true);
-    if (!silent) toast('Ошибка отправки');
-    return false;
-  }
-}
-
-async function gistDownload() {
-  const cfg = loadGistConfig();
-  if (!cfg.id || !cfg.token) {
-    alert('Сначала укажите Gist ID и Token');
+  if (!('Notification' in window)) {
+    el.innerHTML = '❌ Ваш браузер не поддерживает уведомления';
+    el.style.background = 'rgba(239,68,68,0.15)';
+    el.style.color = '#fca5a5';
+    if (btn) btn.style.display = 'none';
     return;
   }
-  if (cfg.token.startsWith('github_pat_')) {
-    updateGistStatus('⚠️ Fine-grained token (github_pat_...) не работает с Gist API. Создайте Classic token (ghp_...)', true);
-    alert('Fine-grained tokens (github_pat_...) не поддерживают Gist API. Нужен Classic token, начинающийся с ghp_');
-    return;
-  }
-  if (cfg.id.includes('/') || cfg.id.length < 20) {
-    updateGistStatus('⚠️ Gist ID выглядит некорректно. Должна быть длинная строка из букв и цифр без слешей.', true);
-    alert('Gist ID должен быть длинной строкой из букв и цифр без логина и слешей!');
-    return;
-  }
-  try {
-    updateGistStatus('⏳ Загружаю из облака...');
-    const resp = await fetch(`https://api.github.com/gists/${cfg.id}`, {
-      headers: {
-        'Authorization': `Bearer ${cfg.token}`,
-        'Accept': 'application/vnd.github+json',
-      }
-    });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(`HTTP ${resp.status}: ${errText}`);
-    }
-    const gist = await resp.json();
-    const file = gist.files['1cdo-tracker.json'];
-    if (!file) {
-      const availableFiles = Object.keys(gist.files).join(', ');
-      throw new Error(`Файл "1cdo-tracker.json" не найден в Gist. Найденные файлы: ${availableFiles}. Переименуйте файл в Gist в "1cdo-tracker.json".`);
-    }
-    const cloudData = JSON.parse(file.content);
-    if (!cloudData || typeof cloudData !== 'object') throw new Error('Некорректные данные в файле');
-
-    const cloudHasData = (cloudData.cases && cloudData.cases.length) ||
-                        (cloudData.freelance && cloudData.freelance.length) ||
-                        (cloudData.articles && cloudData.articles.length) ||
-                        (cloudData.tasks && Object.keys(cloudData.tasks).length);
-    const localHasData = data.cases.length || data.freelance.length || data.articles.length || Object.keys(data.tasks).length;
-
-    if (!cloudHasData && localHasData) {
-      if (!confirm('В облаке пусто, а локально есть данные. Точно загрузить пустое? Лучше "Отмена" и сначала "Отправить в облако".')) return;
-    }
-
-    const cloudTime = cloudData._syncedAt || 'неизвестно';
-    if (!confirm(`Заменить локальные данные? Облачная версия: ${cloudTime}`)) return;
-
-    delete cloudData._syncedAt;
-    data = { ...JSON.parse(JSON.stringify(DEFAULT_DATA)), ...cloudData };
-    saveData();
-    renderAll();
-    const now = new Date().toLocaleTimeString('ru', { hour:'2-digit', minute:'2-digit' });
-    updateGistStatus(`✅ Загружено из облака в ${now}`);
-    toast('Данные загружены!');
-  } catch(err) {
-    const friendly = explainError(err.message);
-    updateGistStatus(`❌ ${friendly}`, true);
-    toast('Ошибка загрузки');
-  }
-}
-
-function explainError(msg) {
-  if (msg.includes('404')) {
-    return 'HTTP 404 — Gist не найден. Проверьте: 1) Gist ID скопирован верно (только хеш, без логина и слешей); 2) Token — Classic (ghp_...), а не Fine-grained (github_pat_...); 3) Gist создан под тем же аккаунтом, что и Token.';
-  }
-  if (msg.includes('401')) {
-    return 'HTTP 401 — Неверный или истёкший Token. Создайте новый на github.com/settings/tokens (Classic, scope: gist).';
-  }
-  if (msg.includes('403')) {
-    return 'HTTP 403 — У Token нет права gist. При создании Token отметьте scope "gist".';
-  }
-  if (msg.includes('422')) {
-    return 'HTTP 422 — Неверный формат данных. Возможно файл в Gist не json.';
-  }
-  return msg;
-}
-
-function toggleAutosync() {
-  const on = document.getElementById('autosync').checked;
-  localStorage.setItem(GIST_AUTOSYNC_KEY, on ? '1' : '0');
-  if (on) {
-    const cfg = loadGistConfig();
-    if (!cfg.id || !cfg.token) {
-      alert('Сначала настройте Gist ID и Token');
-      document.getElementById('autosync').checked = false;
-      localStorage.setItem(GIST_AUTOSYNC_KEY, '0');
-      return;
-    }
-    updateGistStatus('🔄 Автосинхронизация включена (отправка через 5 сек после изменений)');
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    el.innerHTML = '✅ Уведомления разрешены. Они будут показываться, пока трекер открыт в браузере.';
+    el.style.background = 'rgba(22,163,74,0.15)';
+    el.style.color = '#86efac';
+    if (btn) btn.textContent = '✅ Уведомления разрешены';
+  } else if (perm === 'denied') {
+    el.innerHTML = '🚫 Уведомления заблокированы. Разрешите их в настройках сайта в браузере (значок замка в адресной строке).';
+    el.style.background = 'rgba(239,68,68,0.15)';
+    el.style.color = '#fca5a5';
+    if (btn) btn.textContent = '🚫 Заблокировано в браузере';
   } else {
-    updateGistStatus('⏸ Автосинхронизация выключена');
+    el.innerHTML = '⏸ Уведомления не настроены. Нажмите кнопку ниже, чтобы разрешить.';
+    el.style.background = 'rgba(245,158,11,0.15)';
+    el.style.color = '#fcd34d';
+    if (btn) btn.textContent = '🔓 Разрешить уведомления';
   }
 }
 
-function scheduleAutosync() {
-  if (localStorage.getItem(GIST_AUTOSYNC_KEY) !== '1') return;
-  clearTimeout(autosyncTimer);
-  autosyncTimer = setTimeout(() => {
-    gistUpload(true); // тихая отправка
-  }, 1000);
+async function requestNotifPermission() {
+  if (!('Notification' in window)) {
+    alert('Ваш браузер не поддерживает уведомления');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  getNotifStatus();
+  if (perm === 'granted') {
+    showNotification('Уведомления подключены 🎉', {
+      body: 'Теперь трекер будет напоминать о учебных сессиях и важных вехах',
+      tag: 'welcome'
+    });
+  }
 }
 
-// Загружаем настройки при старте
+function testNotification() {
+  if (Notification.permission !== 'granted') {
+    alert('Сначала разрешите уведомления (кнопка слева)');
+    return;
+  }
+  showNotification('🧪 Тестовое уведомление', {
+    body: 'Если вы это видите — всё работает! Ваш план на сегодня доступен в трекере.',
+    tag: 'test'
+  });
+}
+
+function showNotification(title, options) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const notif = new Notification(title, {
+      icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231d4ed8"/><text x="50" y="65" font-size="55" text-anchor="middle" fill="white" font-family="sans-serif">📘</text></svg>',
+      badge: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%231d4ed8"/></svg>',
+      ...options
+    });
+    notif.onclick = function() {
+      window.focus();
+      this.close();
+    };
+    setTimeout(() => notif.close(), 15000);
+  } catch(e) {
+    console.error('Notification error:', e);
+  }
+}
+
+function loadSchedule() {
+  try {
+    return JSON.parse(localStorage.getItem(NOTIF_SCHEDULE_KEY)) || {};
+  } catch(e) { return {}; }
+}
+function saveSchedule() {
+  const sched = {
+    mon: { time: document.getElementById('t-mon').value, enabled: document.getElementById('e-mon').checked },
+    tue: { time: document.getElementById('t-tue').value, enabled: document.getElementById('e-tue').checked },
+    wed: { time: document.getElementById('t-wed').value, enabled: document.getElementById('e-wed').checked },
+    thu: { time: document.getElementById('t-thu').value, enabled: document.getElementById('e-thu').checked },
+    fri: { time: document.getElementById('t-fri').value, enabled: document.getElementById('e-fri').checked },
+  };
+  localStorage.setItem(NOTIF_SCHEDULE_KEY, JSON.stringify(sched));
+  toast('Расписание сохранено');
+}
+function loadNotifPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(NOTIF_PREFS_KEY)) || {};
+  } catch(e) { return {}; }
+}
+function saveNotifPrefs() {
+  const prefs = {
+    eveningSummary: document.getElementById('notif-evening-summary').checked,
+    milestone: document.getElementById('notif-milestone').checked,
+    mondaySummary: document.getElementById('notif-monday-summary').checked,
+  };
+  localStorage.setItem(NOTIF_PREFS_KEY, JSON.stringify(prefs));
+  toast('Настройки сохранены');
+}
+
+function initNotifUI() {
+  const sched = loadSchedule();
+  ['mon','tue','wed','thu','fri'].forEach(d => {
+    const t = document.getElementById('t-'+d);
+    const e = document.getElementById('e-'+d);
+    if (t && sched[d]) t.value = sched[d].time || t.value;
+    if (e && sched[d]) e.checked = !!sched[d].enabled;
+  });
+  const prefs = loadNotifPrefs();
+  const ev = document.getElementById('notif-evening-summary');
+  const ml = document.getElementById('notif-milestone');
+  const mn = document.getElementById('notif-monday-summary');
+  if (ev) ev.checked = !!prefs.eveningSummary;
+  if (ml) ml.checked = !!prefs.milestone;
+  if (mn) mn.checked = !!prefs.mondaySummary;
+  getNotifStatus();
+}
+
+function getShownToday() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(NOTIF_SHOWN_KEY)) || {};
+    const today = new Date().toISOString().slice(0,10);
+    if (stored.date !== today) return { date: today, keys: [] };
+    return stored;
+  } catch(e) {
+    return { date: new Date().toISOString().slice(0,10), keys: [] };
+  }
+}
+function markShown(key) {
+  const s = getShownToday();
+  if (!s.keys.includes(key)) s.keys.push(key);
+  localStorage.setItem(NOTIF_SHOWN_KEY, JSON.stringify(s));
+}
+function wasShown(key) {
+  return getShownToday().keys.includes(key);
+}
+
+function checkScheduledNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date();
+  const days = ['sun','mon','tue','wed','thu','fri','sat'];
+  const dayKey = days[now.getDay()];
+  const sched = loadSchedule();
+  const prefs = loadNotifPrefs();
+  const hours = String(now.getHours()).padStart(2,'0');
+  const mins = String(now.getMinutes()).padStart(2,'0');
+  const curTime = `${hours}:${mins}`;
+
+  // Проверка расписания сессий (с напоминанием за 5 минут до начала)
+  if (sched[dayKey] && sched[dayKey].enabled && sched[dayKey].time) {
+    const [h, m] = sched[dayKey].time.split(':').map(Number);
+    const sessionDate = new Date(now);
+    sessionDate.setHours(h, m, 0, 0);
+    const diffMin = Math.round((sessionDate - now) / 60000);
+    // Окно 5-6 минут до начала
+    if (diffMin >= 4 && diffMin <= 6) {
+      const key = `session-${dayKey}`;
+      if (!wasShown(key)) {
+        const activeWeek = WEEKS.find(w => !w.vacation && w.tasks.some(t => !data.tasks[`${w.id}-${t.id}`]));
+        const lessonTitle = activeWeek && LESSONS[activeWeek.id] ? LESSONS[activeWeek.id].title : 'учебная сессия';
+        showNotification('📘 Через 5 минут — учебная сессия', {
+          body: `Тема: ${lessonTitle}\nОткройте трекер и выберите задачу на сегодня`,
+          tag: key,
+          requireInteraction: true
+        });
+        markShown(key);
+      }
+    }
+  }
+
+  // План на неделю по понедельникам в 9:00
+  if (prefs.mondaySummary && dayKey === 'mon' && curTime === '09:00') {
+    const key = 'monday-plan';
+    if (!wasShown(key)) {
+      const activeWeek = WEEKS.find(w => !w.vacation && w.tasks.some(t => !data.tasks[`${w.id}-${t.id}`]));
+      if (activeWeek) {
+        const remaining = activeWeek.tasks.filter(t => !data.tasks[`${activeWeek.id}-${t.id}`]).length;
+        showNotification('🗓 Новая неделя обучения!', {
+          body: `${activeWeek.title}\nОсталось задач: ${remaining}`,
+          tag: key,
+          requireInteraction: true
+        });
+        markShown(key);
+      }
+    }
+  }
+
+  // Вечерние итоги дня в 18:00
+  if (prefs.eveningSummary && curTime === '18:00') {
+    const key = 'evening-summary';
+    if (!wasShown(key)) {
+      const activeWeek = WEEKS.find(w => !w.vacation && w.tasks.some(t => !data.tasks[`${w.id}-${t.id}`]));
+      if (activeWeek) {
+        const total = activeWeek.tasks.length;
+        const done = activeWeek.tasks.filter(t => data.tasks[`${activeWeek.id}-${t.id}`]).length;
+        const remaining = total - done;
+        showNotification('📊 Итоги дня', {
+          body: `${activeWeek.title}\nПрогресс: ${done}/${total}${remaining > 0 ? ` · Осталось ${remaining} задач` : ' · Все задачи выполнены!'}`,
+          tag: key
+        });
+        markShown(key);
+      }
+    }
+  }
+
+  // Напоминание о вехах за день
+  if (prefs.milestone) {
+    // Сегодняшняя дата в формате "DD месяца"
+    const monthsRu = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+    const todayStr = `${now.getDate()} ${monthsRu[now.getMonth()]}`;
+    const milestone = MILESTONES.find(m => m.date === todayStr);
+    if (milestone) {
+      const key = `milestone-${todayStr}`;
+      if (!wasShown(key) && curTime === '09:00') {
+        showNotification('🏆 Сегодня важный день!', {
+          body: milestone.title,
+          tag: key,
+          requireInteraction: true
+        });
+        markShown(key);
+      }
+    }
+  }
+}
+
+function startNotifChecker() {
+  if (notifCheckTimer) clearInterval(notifCheckTimer);
+  // Проверка каждую минуту
+  notifCheckTimer = setInterval(checkScheduledNotifications, 60000);
+  // И сразу одна проверка
+  checkScheduledNotifications();
+}
+
 function initGistConfig() {
   const cfg = loadGistConfig();
   const idEl = document.getElementById('gist-id');
@@ -1745,6 +2450,8 @@ if (firstActive) openWeeks[firstActive.id] = true;
 renderAll();
 initDates();
 initGistConfig();
+initNotifUI();
+startNotifChecker();
 </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a10a43776a30e4a2',t:'MTc4MjI4ODcwNQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
